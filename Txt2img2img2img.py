@@ -10,7 +10,7 @@ from skimage.util import random_noise
 from gradio.processing_utils import encode_pil_to_base64
 import numpy as np
 import os.path
-
+from copy import deepcopy
 def remap_range(value, minIn, MaxIn, minOut, maxOut):
             if value > MaxIn: value = MaxIn;
             if value < minIn: value = minIn;
@@ -36,33 +36,48 @@ class Script(scripts.Script):
         model_list.append("Same")
 
         t2iii_reprocess = gr.Slider(minimum=1, maximum=128, step=1, label='Number of img2img', value=1)
-        t2iii_steps = gr.Slider(minimum=1, maximum=120, step=1, label='img2img steps', value=26)
-        t2iii_cfg_scale = gr.Slider(minimum=1, maximum=30, step=0.1, label='img2img cfg scale ', value=8.3)
-        t2iii_seed_shift = gr.Slider(minimum=-1, maximum=1000000, step=1, label='img2img new seed+ (-1 for random)', value=1)
-        t2iii_denoising_strength = gr.Slider(minimum=0, maximum=1, step=0.01, label='img2img denoising strength ', value=0.42)
-        t2iii_2x_last = gr.Slider(minimum=1, maximum=4, step=0.1, label='resize time x size for last pass', value=1)
+        t2iii_steps = gr.Slider(minimum=1, maximum=120, step=1, label='img2img steps', value=24)
         with gr.Row():
-            t2iii_patch_upscale = gr.Checkbox(label='Patch upscale', value=False)
-            t2iii_patch_shift   = gr.Checkbox(label='Patch upscale shift grid', value=True)
-            t2iii_save_first    = gr.Checkbox(label='Save first image', value=False)
-            t2iii_only_last     = gr.Checkbox(label='Only save last img2img', value=True)
+            t2iii_cfg_scale = gr.Slider(minimum=1, maximum=30, step=0.1, label='img2img cfg scale ', value=8.3)
+            t2iii_cfg_scale_end = gr.Slider(minimum=0, maximum=30, step=0.1, label='img2img cfg end scale (0=disabled) ', value=0)
+        with gr.Row():
+            t2iii_denoising_strength = gr.Slider(minimum=0, maximum=1, step=0.01, label='img2img denoising strength ', value=0.42)
+            t2iii_patch_end_denoising = gr.Slider(minimum=0, maximum=1,  step=0.01, label='Last img denoising (0=disabled)', value=0)
+        t2iii_seed_shift = gr.Slider(minimum=-1, maximum=1000000, step=1, label='img2img new seed+ (-1 for random)', value=1)
+        with gr.Row():
+            t2iii_patch_upscale   = gr.Checkbox(label='Patch upscale', value=False)
+            t2iii_patch_shift     = gr.Checkbox(label='Patch upscale shift grid', value=True)
+            t2iii_save_first      = gr.Checkbox(label='Save first image', value=False)
+            t2iii_only_last       = gr.Checkbox(label='Only save last img2img', value=True)
             t2iii_face_correction = gr.Checkbox(label='Face correction on all', value=False)
-            t2iii_face_correction_last = gr.Checkbox(label='Face correction on last', value=True)
+            t2iii_face_correction_last = gr.Checkbox(label='Face correction on last', value=False)
         with gr.Row():
             t2iii_model   = gr.Dropdown(label="Model",   choices=model_list, value="Same")
             t2iii_sampler = gr.Dropdown(label="Sampler", choices=img2img_samplers_names, value="DPM++ 2M")
-        t2iii_clip    = gr.Slider(minimum=0, maximum=12, step=1, label='change clip for img2img (0 = disabled)', value=0)
-        t2iii_noise   = gr.Slider(minimum=0, maximum=0.005,  step=0.0001, label='Add noise before img2img ', value=0)
-        t2iii_patch_square_size   = gr.Slider(minimum=64, maximum=2048,  step=64, label='Patch upscale square size', value=512)
-        t2iii_patch_padding       = gr.Slider(minimum=0, maximum=512,  step=8, label='Patch upscale padding', value=128)
-        t2iii_patch_border        = gr.Slider(minimum=0, maximum=64,   step=1, label='Patch upscale mask inner border', value=8)
-        t2iii_patch_mask_blur     = gr.Slider(minimum=0, maximum=64 ,  step=1, label='Patch upscale mask blur', value=4)
-        t2iii_patch_end_denoising = gr.Slider(minimum=0, maximum=1,  step=0.01, label='Last img denoising (0=disabled)', value=0)
-        t2iii_upscale_x = gr.Slider(minimum=64, maximum=8192, step=64, label='img2img width (64 = no rescale)', value=64)
-        t2iii_upscale_y = gr.Slider(minimum=64, maximum=8192, step=64, label='img2img height (64 = no rescale)', value=64)
+        # with gr.Row():
+        #     t2iii_override_s_noise = gr.Checkbox(label='Override sampler\'s noise for last pass', value=False)
+        #     t2iii_sampler_noise    = gr.Slider(minimum=0, maximum=1,  step=0.5, label='Sampler\'s noise for last pass', value=0)
+        with gr.Row():
+            t2iii_clip    = gr.Slider(minimum=0, maximum=12, step=1, label='change clip for img2img (0 = disabled)', value=0)
+            t2iii_noise   = gr.Slider(minimum=0, maximum=0.005,  step=0.0001, label='Add noise before img2img ', value=0)
+        with gr.Row():
+            t2iii_patch_square_size   = gr.Slider(minimum=64, maximum=2048,  step=64, label='Patch upscale square size', value=512)
+            t2iii_patch_padding       = gr.Slider(minimum=0, maximum=512,  step=8, label='Patch upscale padding', value=128)
+        with gr.Row():
+            t2iii_patch_border        = gr.Slider(minimum=0, maximum=64,   step=1, label='Patch upscale mask inner border', value=8)
+            t2iii_patch_mask_blur     = gr.Slider(minimum=0, maximum=64 ,  step=1, label='Patch upscale mask blur', value=4)
+        with gr.Row():
+            t2iii_upscale_x = gr.Slider(minimum=64, maximum=16384, step=64, label='img2img width (64 = no rescale) ', value=768)
+            t2iii_upscale_y = gr.Slider(minimum=64, maximum=16384, step=64, label='img2img height (64 = no rescale) ', value=960)
+        t2iii_2x_last = gr.Slider(minimum=1, maximum=4, step=0.1, label='resize time x size for last pass', value=1)
+        with gr.Row():
+            t2iii_replace_prompt  = gr.Checkbox(label='Replace the prompt', value=False)
+            t2iii_replace_negative_prompt  = gr.Checkbox(label='Replace the negative prompt', value=False)
         add_to_prompt   = gr.Textbox(label="Add to prompt", lines=2, max_lines=2000)
-        return    [t2iii_reprocess,t2iii_steps,t2iii_cfg_scale,t2iii_seed_shift,t2iii_denoising_strength,t2iii_patch_upscale,t2iii_patch_shift,t2iii_2x_last,t2iii_save_first,t2iii_only_last,t2iii_face_correction,t2iii_face_correction_last, t2iii_model, t2iii_sampler,t2iii_clip,t2iii_noise,t2iii_patch_padding,t2iii_patch_square_size,t2iii_patch_border,t2iii_patch_mask_blur,t2iii_patch_end_denoising,t2iii_upscale_x,t2iii_upscale_y,add_to_prompt]
-    def run(self,p,t2iii_reprocess,t2iii_steps,t2iii_cfg_scale,t2iii_seed_shift,t2iii_denoising_strength,t2iii_patch_upscale,t2iii_patch_shift,t2iii_2x_last,t2iii_save_first,t2iii_only_last,t2iii_face_correction,t2iii_face_correction_last, t2iii_model, t2iii_sampler,t2iii_clip,t2iii_noise,t2iii_patch_padding,t2iii_patch_square_size,t2iii_patch_border,t2iii_patch_mask_blur,t2iii_patch_end_denoising,t2iii_upscale_x,t2iii_upscale_y,add_to_prompt):
+        add_to_negative_prompt   = gr.Textbox(label="Add to prompt", lines=2, max_lines=2000)
+
+        return    [t2iii_reprocess,t2iii_steps,t2iii_cfg_scale,t2iii_seed_shift,t2iii_denoising_strength,t2iii_patch_upscale,t2iii_patch_shift,t2iii_2x_last,t2iii_save_first,t2iii_only_last,t2iii_face_correction,t2iii_face_correction_last, t2iii_model, t2iii_sampler,t2iii_clip,t2iii_noise,t2iii_patch_padding,t2iii_patch_square_size,t2iii_patch_border,t2iii_patch_mask_blur,t2iii_patch_end_denoising,t2iii_upscale_x,t2iii_upscale_y,add_to_prompt,add_to_negative_prompt,t2iii_replace_prompt,t2iii_replace_negative_prompt,t2iii_cfg_scale_end]
+    def run(self,p,t2iii_reprocess,t2iii_steps,t2iii_cfg_scale,t2iii_seed_shift,t2iii_denoising_strength,t2iii_patch_upscale,t2iii_patch_shift,t2iii_2x_last,t2iii_save_first,t2iii_only_last,t2iii_face_correction,t2iii_face_correction_last, t2iii_model, t2iii_sampler,t2iii_clip,t2iii_noise,t2iii_patch_padding,t2iii_patch_square_size,t2iii_patch_border,t2iii_patch_mask_blur,t2iii_patch_end_denoising,t2iii_upscale_x,t2iii_upscale_y,add_to_prompt,add_to_negative_prompt,t2iii_replace_prompt,t2iii_replace_negative_prompt,t2iii_cfg_scale_end):
         def add_noise_to_image(img,seed,t2iii_noise):
             img = np.array(img)
             img = random_noise(img, mode='gaussian', seed=proc.seed, clip=True, var=t2iii_noise)
@@ -106,6 +121,8 @@ class Script(scripts.Script):
 
         initial_CLIP = opts.data["CLIP_stop_at_last_layers"]
         p.do_not_save_samples = not t2iii_save_first
+        initial_prompt = deepcopy(p.prompt)
+        initial_negative_prompt = deepcopy(p.negative_prompt)
 
         n_iter=p.n_iter
         for j in range(n_iter):
@@ -119,7 +136,24 @@ class Script(scripts.Script):
             if t2iii_clip > 0:
                 opts.data["CLIP_stop_at_last_layers"] = initial_CLIP
 
+            p.prompt = initial_prompt
+            p.negative_prompt = initial_negative_prompt
+
+            # PROCESS IMAGE
             proc = process_images(p)
+
+            if add_to_prompt != "" or t2iii_replace_prompt:
+                if t2iii_replace_prompt:
+                    p.prompt = add_to_prompt
+                else:
+                    p.prompt = initial_prompt+add_to_prompt
+
+            if add_to_negative_prompt != "" or t2iii_replace_negative_prompt:
+                if t2iii_replace_negative_prompt:
+                    p.negative_prompt = add_to_negative_prompt
+                else:
+                    p.negative_prompt = initial_negative_prompt+add_to_negative_prompt
+
             basename = ""
             extra_gen_parms = {
             'Initial steps':p.steps,
@@ -177,7 +211,7 @@ class Script(scripts.Script):
                     sd_model=p.sd_model,
                     outpath_samples=p.outpath_samples,
                     outpath_grids=p.outpath_grids,
-                    prompt=proc.info.split("\nNegative prompt")[0]+add_to_prompt,
+                    prompt=p.prompt,
                     styles=p.styles,
                     seed=reprocess_seed,
                     subseed=proc_temp.subseed,
@@ -190,20 +224,24 @@ class Script(scripts.Script):
                     batch_size=p.batch_size,
                     n_iter=p.n_iter,
                     steps=t2iii_steps,
-                    cfg_scale=t2iii_cfg_scale,
+                    cfg_scale=remap_range(i,0,t2iii_reprocess-1,t2iii_cfg_scale,t2iii_cfg_scale_end) if t2iii_cfg_scale_end > 0 else t2iii_cfg_scale,
                     width=upscale_x,
                     height=upscale_y,
                     restore_faces=(t2iii_face_correction or (t2iii_face_correction_last and t2iii_reprocess-1 == i)) and not (t2iii_reprocess-1 == i and not t2iii_face_correction_last),
                     tiling=p.tiling,
-                    do_not_save_samples=not ((t2iii_only_last and t2iii_reprocess-1 == i) or not t2iii_only_last),
+                    do_not_save_samples=True,
                     do_not_save_grid=p.do_not_save_grid,
                     extra_generation_params=extra_gen_parms,
                     overlay_images=p.overlay_images,
                     negative_prompt=p.negative_prompt,
                     eta=p.eta
                     )
+                # if t2iii_reprocess-1 == i and t2iii_override_s_noise:
+                #         img2img_processing.s_noise = t2iii_sampler_noise
                 if not t2iii_patch_upscale:
                     proc2 = process_images(img2img_processing)
+                    if ((t2iii_only_last and t2iii_reprocess-1 == i) or not t2iii_only_last):
+                        images.save_image(proc2.images[0], p.outpath_samples, "", proc_temp.seed, proc2.prompt, opts.samples_format, info=proc_temp.info, p=p)
                 else:
                     proc_temp.images[0] = proc_temp.images[0].resize((upscale_x, upscale_y), Image.Resampling.LANCZOS)
                     width_for_patch, height_for_patch = proc_temp.images[0].size
